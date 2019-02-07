@@ -1,0 +1,337 @@
+---
+title: "Wage-Race project write-up"
+author: "Yichuan Luo yl4073"
+date: "December 1, 2018"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+## Goal
+
+There are two main goals of this project. The first goal is to come up with a linear regression model with wages being the dependent variable. The final model will be tested through statistical validation methods and has to include all relevant variables, interactions and functional forms of the covariates. And the second goal is to conduct a statistical study to determine whether the average male wages are statistically different for the three race classes included in the dataset.
+
+## Data Description
+
+The data includes roughly 25000 records for full time working males. The 9 variables are:
+
+\begin{table}[h!]
+\label{table:1} 
+\begin{tabular}{lll}
+\hline
+Variable  & Variable Name & Description \\
+\hline
+$edu$ & Education & Total years of education (years) \\
+$exp$ & Experience & Total years of working experience (years) \\
+$city$ & City & Working in a city? (yes/no) \\
+$reg$ & US region & US Location of the worker (midwest, northeast, south, west) \\
+$race$ & Race & Race of the worker(African American, Caucasian, Other) \\
+$deg$ & Degree &College graduate (yes/no) \\
+$com$ & Commuting distance & Distance to work (miles) \\
+$emp$ & Employee & Number of employees in a company \\
+$wage$ & Wage & Wage in dollars \\
+\hline
+\end{tabular}
+\end{table}
+\vspace{.5cm}
+Below we read in the dataset and name it **df**.
+\vspace{.5cm}
+```{r, echo=FALSE}
+setwd("C:/Users/Yichuan Luo/Desktop/Regression")
+df <- read.csv("salary.txt",header = T)
+names(df)
+head(df)
+```
+
+\pagebreak
+
+## Exploratory analysis on the research question
+
+Firstly we will look at the boxplot of wage vs race, however, there exisits significant amount of outliars in this set under race category *white*. To avoid this, we create the boxplot of log wage vs race instead.
+
+
+```{r,echo=FALSE}
+boxplot(log(df$wage)~df$race,xlab = "Race", ylab = "Log Wages")
+```
+
+
+This plot looks great since the effects of outliars have been reduced by taking the log of wages. This plot does look like there are some differences in wages between black and two other categories. Next we check for multicollinearity to see if race is highly correlated with any other independent numerical variables (since correlation coefficient is mainly used between numerical variables). To create a simple correlation table we firstly create a new variable called *race_num* which replaces race categories with a respective number. In this case we replace *black*, *other* and *white* with number 0,1,2 respectively. Moreoever, we create two additional variables named *race_white* and *race_other* which takes on 1 if the worker is of race *white* or *other*, and takes on 0 otherwise. This is to create additional comparisions within the independent variables. The correlation table shown below:
+\vspace{.5cm}
+
+```{r,echo=FALSE}
+#pairs(df)
+df$race_num <- ifelse(df$race == "black", 0, 1)
+df$race_other <- ifelse(df$race == "other", 1 ,0)
+df$race_white <- ifelse(df$race == "white",1,0)
+df$race_num <- ifelse(df$race == "white", 2, df$race_num)
+df1 <- df[,-1]
+round(cor(df1[sapply(df1, function(x) !is.factor(x))]),4)
+```
+
+\vspace{.5cm}
+Clearly from the correlation table there is not much correlation with other independent variables besides the three new variables that we created. The high correlation between the newly created variables is expected. And we assume multicollinearity likely won't be an issue, but we will check more specificially later. For additional exploratory analysis we conduct a simple regression of log wages versus race:
+\vspace{.5cm}
+
+```{r, echo=FALSE}
+lm(log(wage)~race,data = df)
+#summary(lm(log(wage~race,data = df)))
+```
+
+
+From the output we notice that the slopes are positive, and all significant with small p values. This indicates that if the worker is not african american there is likely some increase in log wage for that person.
+
+#Statistical Model
+
+##Final Model Summary:
+
+
+```{r,echo=FALSE}
+#edu+I(edu^2)+I(edu^3)+exp+I(exp^2)+I(exp^3)+I((exp*edu)^2)+I((exp*edu)^2)
+bac.lambda <- .141414141414141
+final_model <- lm(I(wage^bac.lambda)~poly(edu,3)+poly(exp,3)+poly(exp*edu,2)
+                    +city+reg+race+emp+deg+city*edu+city*exp+reg*edu,data = df)
+summary(final_model)
+#final_model
+```
+
+## Equation:
+
+\begin{equation}\label{Final model}
+\begin{split}
+wage^\lambda = \beta_0+\beta_1 *edu+\beta_2*edu^2+\beta_3*edu^3+\beta_4*exp+\beta_5*exp^2+\beta_6*exp^3+\beta_7*exp*edu\\
++\beta_8*(exp*edu)^2+\beta_9*cityyes+\beta_{10}*regnortheast+\beta_{11}*regsouth+\beta_{12}*regwest+\beta_{13}*raceother\\
++\beta_{14}*racewhite+\beta_{15}*degyes+\beta_{16}*emp+\beta_{17}*edu*regnortheast+\beta_{18}*edu*regsouth \\
++\beta_{19}*edu*regwest +\beta_{20}*edu*cityyes+\beta_{21}*exp*cityyes
+\end{split}
+\end{equation}
+
+Where lambda is .1414141 and the beta coefficients are as follows:
+
+
+```{r,echo=FALSE}
+co <- final_model$coefficients[c(-18,-19)]
+names(co)[1:9] <- c("Intercept","edu","edu^2","edu^3","exp","exp^2","exp^3",'exp*edu',"(exp*edu)^2")
+co
+```
+Note: Using poly function for polynomial function forms to reduce multicollinearity.
+
+\vspace{1cm}
+
+##AIC,$R^2$ and Adjusted $R_a^2$:
+
+
+```{r,echo=FALSE}
+round(c(AIC=AIC(final_model),R_squared=0.3586,Adjusted_R_squared=0.3581),4)
+```
+\vspace{1cm}
+
+##MSPR (Model Validation)
+
+To compute MSPR, we split the entire data using 80-20 rule which uses 80% of the data as training set and the rest 20% as testing set Firstly we split the data up using sample function and conduct quality control on the train/test data. This is to ensure the proportion of the race levels to be similar for the full data, training data and testing data. This should be true for other different categorical variables. In this case we test if the proportions are similar for race,region,and city variables. The full data, training data, and testing data proportions are respectively shown in the following tables on the variable race, region and city:
+
+
+```{r,echo=FALSE}
+set.seed(0)
+n <- round(.2*nrow(df))
+index <- sample(1:nrow(df),n,replace = F)
+train.data <- df[-index,]
+data <- train.data
+test.data <- df[index,]
+```
+
+
+```{r,echo=FALSE}
+table(df$race,df$reg)/nrow(df)
+table(train.data$race,train.data$reg)/nrow(train.data)
+table(test.data$race,test.data$reg)/nrow(test.data)
+
+table(ifelse(df$city=="yes","city-yes","city-no"))/nrow(df)
+table(ifelse(train.data$city=="yes","city-yes","city-no"))/nrow(train.data)
+table(ifelse(test.data$city=="yes","city-yes","city-no"))/nrow(test.data)
+```
+\vspace{.5cm}
+
+We can see that the proportions are very similar for all three datasets. Now we fit the final model on the training data and compute the MSPR on the test set. Below shows the final result of our MSPR computation.
+\vspace{.5cm}
+
+```{r,echo=FALSE}
+MSE.earler <- sum((residuals(final_model))^2)/(nrow(df)-22)
+final_model_train_unweighted <- lm(I(wage^bac.lambda)~poly(exp,3)+poly(exp*edu,2)
+                    +city+reg+race+emp+deg+city*edu+city*exp+reg*edu,data = train.data)
+
+final_model_train <- final_model_train_unweighted
+MSE <- sum((residuals(final_model_train))^2)/(nrow(train.data)-22)
+
+Y.test <- test.data[,1]
+X.test <- test.data[,-1]
+n.test <- nrow(X.test)
+options(warn=-1)
+Y.hat.test <- predict(final_model_train,newdata = X.test)
+options(warn=1)
+#length(Y.hat.test)==n.test
+
+MSPR <- mean((Y.test^bac.lambda-Y.hat.test)^2)
+
+round(c(MSPR=MSPR,MSE=MSE,MSEearler=MSE.earler),4)
+```
+\vspace{.5cm}
+The MSPR are extremely close to the MSE of training set and the MSE of full data set. This is a good indication that our model works since our model fits out-of-sample similar to in-sample. 
+\vspace{1cm}
+
+#Research Question
+
+##Testing Hypothesis:
+
+To answer our research questions, we must define a null hypothesis. Suppose we adopt the regression formula from earlier, if the African American males have statistically different wages compared to Caucasian males it should be reflected on the slope of *race* variable in our formula. In our formula we have two variables corresponding to *race*, one being *raceother* and the other being *racewhite*. These two variables take on value of 1 when the worker is race of *other* or *white* respectively, 0 otherwise. Consequently, if the sample means of wages are statistically different between *black* and *other*, the slope of *raceother* variable would be significantly different than 0. In other words, we are testing: $H_0: \beta_{other}=0$ and $H_A: \beta_{other} \neq 0$ with $\beta_{other}$ being the slope of *raceother* variable. Similarly, we have near- identical procedure to test if the sample means of wages are statistically different between *black* and *white* with the following hypothesis: $H_0: \beta_{white}=0$ and $H_A: \beta_{white} \neq 0$. Since we have clearly stated our testing procedure, we can now move on to conduct the tests. Also it is worth mentioning that we are testing if wage to the power of our boxcox $\lambda$ is significantly different within the *race* variables, in order to avoid the problem of extreme outliars in this set of data. 
+
+##Simple Two-sample t-test:
+
+To begin our procedure, firstly we will conduct a very rudimentary two-sample t-test. This tests our hypothesis but will not take into account of any other variables besides *wage* and *race*. It represents a simple regression formula $wage^{\lambda}=\beta_0+\beta_1*raceother+\beta_2*racewhite$. This simple test can be done with the following lines of code:
+```{r}
+wage_white <- df$wage[df$race=="white"]^bac.lambda
+wage_black <- df$wage[df$race=="black"]^bac.lambda
+wage_other <- df$wage[df$race=="other"]^bac.lambda
+t.test(wage_white,wage_black,var.equal = T)
+t.test(wage_other,wage_black,var.equal = T)
+```
+
+Clearly we see that the wages are significantly different using the above simple two-sample t-test. (Note this resembles earlier regression model with just the *race* variable in exploratory analysis). Now we will look more specifically at our final model formula.
+
+##Marginal t-test and f-test:
+
+To conduct a marginal t-test we can simply take a look at the summary output from earlier section. We notice that both *raceother* and *racewhite* had rather larger t-values of 16.465 and 19.354. Each with extremely small p-values which mean we reject both null hypothesis. We will also try a f-test with the following code:
+```{r}
+#Final full model
+full <- lm(I(wage^bac.lambda)~poly(edu,3)+poly(exp,3)+poly(exp*edu,2)
+                    +city+reg+race+emp+deg+city*edu+city*exp+reg*edu,data = df)
+#Reduced model if null hypothesis were true
+reduced <- lm(I(wage^bac.lambda)~poly(edu,3)+poly(exp,3)+poly(exp*edu,2)
+                    +city+reg+I(race=='white')+emp+deg+city*edu+city*exp+reg*edu,data = df)
+anova(reduced,full)
+```
+
+Similar code was entered to test slope of *racewhite* variable. We obtain f-values of 270.8 and 374.18 for *raceother* and *racewhite* variables respectively. They both corresponds with very low p-values which also mean that we reject both null hypothesis. (Also note that the squares of the t-values return exactly the same f-values). 
+```{r,echo=FALSE}
+# full <- lm(I(wage^bac.lambda)~poly(edu,3)+poly(exp,3)+poly(exp*edu,2)
+#                     +city+reg+race+emp+deg+city*edu+city*exp+reg*edu,data = df)
+# reduced <- lm(I(wage^bac.lambda)~poly(edu,3)+poly(exp,3)+poly(exp*edu,2)
+#                     +city+reg+I(race=='other')+emp+deg+city*edu+city*exp+reg*edu,data = df)
+# anova(reduced,full)
+```
+
+##Conclusion:
+
+With above testing procedures it is fairly safe to reject the null hypothesis and conclude that the slopes of the *race* variables are significantly different from 0. Consequently, we reach our final conclusion on the research questions that the wages are statistically different between *black* and other two race categories(*other*,*white*).
+
+\vspace{1cm}
+
+#Model Selection:
+
+In order to select the best regression model, we must first define a metric of comparison and rules between two models to determine which to select. In this project, we mainly focus on two criteria: $R_a^2$ and *AIC*. The rule of selection is straight-forward for which we select the model with the lowest AIC score and highest $R_a^2$. However, depending on the situation, we may not include a change to the model even if it returns a greater AIC and $R_a^2$ due to various reasons. As we begin our model exploration, we create a rough model which regresses wages against all other variable, however, the qq-plot shows that the results are heavily skewed to the right. Additionally the adjusted $R^2$ is .218 and the AIC of this model is 367789.3 which is not exactly ideal.  We try to remedy this by taking log of wages and then regress against all other variables.
+
+
+##Log wage
+
+The log wage regression model yields a much better $R_a^2$ value of .2892 and the AIC went down to 39454.08 which almost improve by factor of ten compared to the last model. The qq-plot also looks much better despite the slight tails in both ends. We are going to remove the variable *com* from the model for now since the p-value for *com* variable is rather insignificant. After the removal we notice there is no change to $R_a^2$ but a very minimal reduction in AIC. During future steps, we shall examine if there exists any correlation regarding this variable.
+
+##Boxcox transformation
+
+Since log transformation itself is a form of transformation on the dependent variable with a $\lambda$ coefficient of 0. We try to estimate the true $\lambda$ for this transoformation on wages using the boxcox procedure. With the boxcox procedure we found an estimation on the transformation coefficient $\lambda$=.1414141. With this boxcox transformation on wages, we obtain a slightly better $R_a^2$ of .2936 and a negative AIC value of -14096.14 which is better than the log transformation from earlier inspection. 
+
+##Interactions
+
+Interactions may exist between covariates to affect our dependent variable. In this step we investigate if such interactions exist. Initially we suspected three cases of interactions: *race*-*edu*,*edu*-*deg*,*edu*-*reg*. From the interactions plots we notice that there likely won't be any interaction between *edu* and *deg*. Since no further conclusion can be drawn from the other two interaction plots. We examine by adding the interaction to our existing model one by one to test their effects. The effect of interaction between *race* and *edu* was miniscule that it did not change the $R_a^2$ value the slightest and AIC inscreased. The interaction bewtee *edu* and *reg* had a slight positive change to our model, so we we will only include this interaction at the moment. Then we tested out another two sets of interaction pairs: *city*-*edu* and *city*-*exp*. We found that both slightly increase our $R_a^2$ and yields slightly better AIC scores as well. With the inclusion of these three interactions we obtain a $R_a^2$ of .296 and an AIC value of -14174.44. Note that this is not a big change but significant enough to include in our model.
+
+##Functional Form
+
+Next, we examine if the addition of functional form to our covariates change our model at all. We begin by plotting the graph of boxcox wage against two of our most significant variables *exp* and *edu*. The relationship does not seem exactly linear and it would not be surprising if both of these variables are significant at a higher degree. We begin testing by adding a polynomial functional form to these two variables to the degree of 2 and later increased to the degree of 3. The results are phenomenal; $R_a^2$ value went up to .3551 and AIC score improved to -16346.79 which is a very significant change compared to before. We also notice that almost all covariates maintain their significance.
+
+##Additional discovery
+
+What if there existed a functional forms to an interaction variable? The two most significant preditors so far in our model are *exp* and *edu*. Even though there is no clear interaction between the two variables, it is possible for the square of interaction be significant. We test out the polynomial functional form of the interaction between these two variables at a degree of 2 and we obtain an even greater $R_a^2$ and a better AIC score of .3581 and -16460.99 respectively. While the polynomial form of degree 3 on this interaction yields an even better result, the increase is so miniscule that We would just include the functional form of degree 2 to minimize the total number of predictors. Next, we explore if there exists any three or four variable interactions. Again we test this out and notice that while some triple-variable(quadriple) interactions makes the $R_a^2$ and AIC values better, many predictors also lose their significance in the process. As a result, we shall exclude these modifications. Finally, we re-examine our boxcox estimation process with the addition of these new changes to the model and the estimation of $\lambda$ remains unchanged. 
+
+##Weighted Variance
+
+From the diagnostics plots we still spot heavy tails. We explore if a weighted variance estimation improves our model. The result shows that by estimating the variance and adds the variance estimation to our model yields an even better $R_a^2$ and AIC value of .366 and -16710.49 respectively. Unfortunately, we can not explicitly include this variance factor in our final model since the variance is an unknown quantity. We were only able to access it by estimation. Therefore we stick to our model from before and promote it as our final model.
+
+\pagebreak
+
+#Diagnostics and Model Validation
+
+For model validation we adopted the 80-20 rule for which we split the original data set into a training set and a testing set to compare the mean squared error of each case (this step was discussed in detail under earlier section regarding MSPR). Most of the diagnostic plots in our process we checked were rstudent qqnorm and residual plots. These diagnostic plots including a boxplot are shown below. We notice that it is still somewhat heavy-tailed but the middle section looks great. The variance is slightly higher on the sides even after transformation to the wage variable which is within our consideration, since wage is generally distributed rather unevenly between the people at top and others. 
+
+\vspace{2cm}
+
+```{r,echo=FALSE}
+n=length(df[,1])
+par(mfrow=c(3,4))
+par(mar=c(3, 3, 2, 1), mgp=c(1.5, 0.5, 0), las=1)
+#plot(df$wage^bac.lambda, ylab="boxcox wage",main = "scatter plot")
+#abline(final_model,col='blue')
+
+qqnorm(rstudent(final_model),main="QQ-Plot")
+abline(a=0,b=1,lty=1)
+
+#par(mfrow=c(2,2))
+plot(predict(final_model),rstudent(final_model),main="Residual Plot",xlab="wage-hat",ylab="Deleted Residuals")
+abline(h=0,lty=2)
+lines(supsmu(predict(final_model),rstudent(final_model)),col=2)
+
+plot(df$wage^bac.lambda,rstudent(final_model),main="Residual Plot",xlab="boxcox wage",ylab="Deleted Residuals")
+abline(h=0,lty=2)
+lines(supsmu(df$wage^bac.lambda,rstudent(final_model)),col=2)
+
+boxplot(rstudent(final_model),main="Box Plot",ylab="Deleted Residuals")
+
+plot(1:n,rstudent(final_model),main="Line Plot",ylab="Deleted Residuals",xlab="")
+abline(h=0,lty=3)
+lines(1:n,rstudent(final_model),col=2)
+
+plot(predict(final_model),(rstudent(final_model))^2,main="Residual Plot",xlab="wage-hat",ylab="Squared Deleted Residuals")
+abline(h=0,lty=2)
+lines(supsmu(predict(final_model),(rstudent(final_model))^2),col=2)
+
+plot(df$wage^bac.lambda,(rstudent(final_model))^2,main="Residual Plot",xlab="boxcox wage",ylab="Squared Deleted Residuals")
+abline(h=0,lty=2)
+lines(supsmu(df$wage^bac.lambda,(rstudent(final_model))^2),col=2)
+```
+\pagebreak
+
+##DF betas
+
+Another important aspect to consider is the DFBETAS, especially surrounding our *race* variable. There are a total of three categorical levels to our *race* variable, so there are two dummy variables(as our regression also suggested). Hence we are essentially examining the DFBETAS to the *raceother* and *racewhite* variables in our regression model. The code and the graphs of the DFBETAS are shown below:
+
+\vspace{.5cm}
+```{r}
+dfb <- dfbetas(final_model)
+library(ggplot2)
+ggplot(data = as.data.frame(dfb)) + 
+  geom_point(mapping = aes(x=1:n,y=raceother), size=.7) + 
+  geom_abline(mapping = aes(intercept=2/sqrt(n),slope=0),lwd=2,col="red") + 
+  geom_abline(mapping = aes(intercept=-2/sqrt(n),slope=0),lwd=2,col="red") + 
+  labs(title = "DFBETAS-Race Other",x = "Index", y="DFBETAS")
+ggplot(data = as.data.frame(dfb)) + 
+  geom_point(mapping = aes(x=1:n,y=racewhite), size=.7) + 
+  geom_abline(mapping = aes(intercept=2/sqrt(n),slope=0),lwd=2,col="red") + 
+  geom_abline(mapping = aes(intercept=-2/sqrt(n),slope=0),lwd=2,col="red") + 
+  labs(title = "DFBETAS-Race White",x = "Index", y="DFBETAS")
+```
+Obviously, most of the DFBETAS are within our limits according to large sample rule. While there are numerous influential observations outside our lines of limits, the total amount is within our tolerance considering that this is a very large sample, so we are bound to have some influential observations. Moreover, the influential observations were evenly distributed from top to bottom which further verifies our model. We investigate DFBETAS more closely to see what percentage of the observations are considered influential:
+```{r,echo=FALSE}
+round(c("DFBETAS-Raceother Influential%"=(1-mean(abs(dfb[,"raceother"])<2/sqrt(n))),"DFBETAS-Racewhite Influential%"=(1-mean(abs(dfb[,"racewhite"])<2/sqrt(n)))),4)
+```
+
+\vspace{.5cm}
+We can easily identify that this is a very small percentage. This discovery further validates our final model as we just confirmed that the influential observations are kept at a small percentage.
+
+\vspace{1cm}
+
+#Summary:
+In this project, with the large set of wage data presented to us, we were able to incorporate our knownledge learnt in class to develop a final regression model. We used several ways to select and validate our model. Additionally, we were able to conclude the answers to the research questions: the average male wages are statistically different for the three race classes, specifically for African American males compared to the other two race classes.
+

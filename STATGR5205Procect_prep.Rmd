@@ -1,0 +1,227 @@
+---
+title: "Linear Regression Models Project Help"
+author: "Gabriel"
+date: "11/12/2018"
+output: pdf_document
+---
+
+
+# Read in data
+
+```{r}
+# data
+df <- read.csv("salary.txt",header=T)
+# Names of variables 
+names(df)
+# Take a peak at the data (try other common functions) 
+head(df)
+```
+# Rough final model
+
+Let's start by including every variable without transformations. 
+
+```{r}
+# Rough model 1 
+r.model.1 <- lm(wage~race+edu+exp+city+reg+deg+com,data=df) 
+summary(r.model.1)
+AIC(r.model.1)
+qqnorm(rstudent(r.model.1))
+qqline(rstudent(r.model.1))
+```
+
+We can easily perform the research questions on this model but it isn't fitting the data very well and the QQplot shows a large deviation from normality.  Note that the coefficient of determination is 22\% and the aic is 367857.3. Let's try an easy fix, i.e., log the wages. 
+
+```{r}
+# Rough model 2 
+r.model.2 <- lm(log(wage)~race+edu+exp+city+reg+deg+com,data=df)
+summary(r.model.2)
+AIC(r.model.2)
+AIC(r.model.1)>AIC(r.model.2)
+qqnorm(rstudent(r.model.2))
+qqline(rstudent(r.model.2))
+```
+
+This model significantly increased the explanatory power of our model, i.e., the coefficient of determination is 29\% and the aic is an entire order of magnitude smaller (39530.07 < 367857.3).  This is a good start.     
+
+
+# Basic EDA (exploratory data analysis)
+
+The first boxpot looks rough. 
+
+```{r}
+boxplot(df$wage~df$race,main="Wage by Race",ylab="Wages")
+```
+
+```{r}
+boxplot(log(df$wage)~df$race,main="Wage by Race",ylab="Wages")
+```
+
+This one looks better. 
+
+
+# Look for interacitons using plots and AIC 
+
+First look at log(wage) against education.  This first plot doesn't show too much except there is some relation ship between log(wages) against education.  
+
+```{r}
+# With line
+boxplot(log(df$wage)~df$edu)
+abline(lm(log(df$wage)~df$edu),col="purple")
+
+# With smoother
+boxplot(log(df$wage)~df$edu)
+lines(supsmu(df$edu,log(df$wage)),col="purple")
+```
+
+Let's extend off of this plot.  Note that if the lines are parallel-ish, then log(wage) does not depend on a statistical interaction between race and against education.  The lines are    
+
+```{r}
+# First define logical variables 
+black <- df$race=="black"
+white <- df$race=="white"
+other <- df$race=="other"
+
+# Scatter plot with smoothers for each race level
+plot(df$edu,log(df$wage),col="lightgrey",xlab="Education",ylab="log(Wages)")
+abline(lm(log(df$wage)[black]~df$edu[black]),col=2)
+abline(lm(log(df$wage)[white]~df$edu[white]),col=3)
+abline(lm(log(df$wage)[other]~df$edu[other]),col=4)
+legend("topleft",legend=c("Black","White","Other"),fill=2:(length(levels(df$race))+1))
+#legend("topright",legend=c("Black","White","Other"),col=c(2,3,4),lty=c(1,1,1))
+```
+
+Looks close to parallel. An interaction between race and education probably shouldn't be included. Let's look at this claim using AIC!
+
+```{r}
+inter.model <- lm(log(wage)~race+race*edu+edu+exp+city+reg+deg+com,data=df)
+summary(inter.model)
+AIC(r.model.2)
+AIC(inter.model)
+AIC(inter.model)<AIC(r.model.2)
+```
+
+Notice that the coefficient of determination didn't have a noticeable increase and the aic statistic is still lower for the non-interaction model. 
+
+## Look for interacitons between categorical variables
+
+We can also look at interactions between variables not related to race. These will not show up in the research question but it might be a good idea to include these variables in the final model model.  
+
+```{r}
+City <- df$city
+Region <- df$reg
+Wages <- df$wage
+interaction.plot(City,Region,log(Wages))
+```
+
+From the above plot, the only level of region that interacts with city is west.  Should we include this one interaction.. or not? Let us see what happens if we include the full interaction between region and city.
+
+```{r}
+
+inter.model.2 <- lm(log(wage)~race+edu+exp+deg+com+city+reg+city*reg,data=df)
+summary(inter.model.2)
+AIC(r.model.2)
+AIC(inter.model)
+AIC(inter.model)<AIC(r.model.2)
+```
+
+Note that we expected R-squared to slightly increase because we are adding three variables but the AIC has not improved.  Maybe try to only add an interaction with the region west?    
+
+
+# Model validation 
+
+## Choose training and validation set
+
+```{r}
+set.seed(0)
+round(.2*nrow(df))
+index <- sample(1:nrow(df),4965,replace = F)
+train.data <- df[-index,]
+data <- train.data 
+test.data <- df[index,]
+```
+
+
+## Quality control check
+
+Ideally we want the proportion of the race levels to be the similar for the full data, training data and validation data.  This is also true for other levels of different categorical variables, e.g., **black** versus **city**.    
+
+```{r}
+# Proportion of black respondents sampled on the full data, training data and validadtion data
+sum(df$race=="black")/nrow(df)
+sum(train.data$race=="black")/nrow(train.data )
+sum(test.data$race=="black")/nrow(test.data)
+
+#Proportion of city-black respondents sampled on the full data, training data and validadtion data
+sum((df$race=="black") & (df$city=="yes"))/nrow(df)
+sum((train.data$race=="black") & (train.data$city=="yes"))/nrow(train.data) 
+sum((test.data$race=="black") & (test.data$city=="yes"))/nrow(test.data)
+
+#Proportion of no-black respondents sampled on the full data, training data and validadtion data
+sum((df$race=="black") & (df$city=="no"))/nrow(df)
+sum((train.data$race=="black") & (train.data$city=="no"))/nrow(train.data) 
+sum((test.data$race=="black") & (test.data$city=="no"))/nrow(test.data)
+
+```
+
+A more efficient way to organize this information is with the table function.
+
+```{r}
+table(df$race,df$city)/nrow(df)
+table(train.data$race,train.data$city)/nrow(train.data)
+table(test.data$race,test.data$city)/nrow(test.data)
+```
+
+Maybe check this for other variables. 
+
+## Compute MSPR
+
+Below we compute the MSPR using our final model trained from the training set on the test set. First fit the final model on the training set. 
+
+```{r}
+bad.final.model <- lm(log(wage)~race+edu+exp+city+reg+deg+com,data=train.data)
+
+# Compute MSE 
+MSE <- sum((residuals(bad.final.model))^2)/(nrow(train.data)-11)
+
+# For comparison, we can compute MSE of the earlier final model
+MSE.earler <- sum((residuals(r.model.2))^2)/(nrow(df)-11)
+```
+
+Next we have to extract the test data.  Then plug the test data in the predict function to find the Y-predictions, i.e., Y.test.  Then construct the MSPR and compare to MSE.   
+
+```{r}
+
+# Note we have to take out the wage variable, column 1 of test data
+names(train.data[,-1])
+
+Y.test <- test.data[,1]
+X.test <- test.data[,-1]
+n.test <- nrow(X.test)
+n.test
+Y.hat.test <- predict(bad.final.model,newdata = X.test)
+length(Y.hat.test)==n.test
+MSPR <- mean((Y.test-Y.hat.test)^2)
+
+# Compare 
+MSPR
+MSE
+MSE.earler
+```
+
+The results look very bad! What happened?  We forgot to take the log of Y! 
+
+```{r}
+# MSPR
+MSPR <- mean((log(Y.test)-Y.hat.test)^2)
+
+# Compare 
+round(c(MSPR=MSPR,MSE=MSE,MSEearler=MSE.earler),4)
+```
+Much better.  It looks like our naive model still fits out-of-sample similar to in-sample.   
+
+
+
+
+
+
+
